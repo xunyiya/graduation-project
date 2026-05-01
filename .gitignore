@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+
+.env
+.env.local
+.env.*.local
+
+frontend/dist/
+backend/dist/
+backend/uploads/*
+!backend/uploads/README.md
+backend/data/*
+!backend/data/README.md

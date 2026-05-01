@@ -1,0 +1,16 @@
+{
+  "project": {
+    "name": "Data Diff Visualizer",
+    "version": 1,
+    "deprecated": true,
+    "features": ["text", "filters"],
+    "owner": {
+      "name": "Alice",
+      "role": "student"
+    }
+  },
+  "settings": {
+    "theme": "light",
+    "pageSize": 20
+  }
+}

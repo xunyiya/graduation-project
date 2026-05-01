@@ -1,0 +1,3 @@
+const Value = 1 // old comment
+name = Codex
+status = READY # local note

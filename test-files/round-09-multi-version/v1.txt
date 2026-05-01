@@ -1,0 +1,4 @@
+name: data-diff-tool
+status: draft
+endpoint: /api/diff
+note: initial prototype

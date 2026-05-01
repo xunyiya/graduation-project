@@ -1,0 +1,14 @@
+{
+  "name": "data-diff-platform",
+  "version": 2,
+  "features": {
+    "text": true,
+    "json": true,
+    "csv": true
+  },
+  "status": "review",
+  "monitoring": {
+    "trend": true,
+    "heatmap": true
+  }
+}

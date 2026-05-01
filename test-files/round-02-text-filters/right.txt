@@ -1,0 +1,3 @@
+const value=1 # new comment
+name=codex
+status=ready

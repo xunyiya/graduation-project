@@ -1,0 +1,4 @@
+name: data-diff-tool
+status: review
+endpoint: /api/diff/compare
+note: initial prototype

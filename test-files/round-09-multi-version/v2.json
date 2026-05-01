@@ -1,0 +1,10 @@
+{
+  "name": "data-diff-tool",
+  "version": 2,
+  "features": {
+    "text": true,
+    "json": true,
+    "csv": true
+  },
+  "status": "review"
+}

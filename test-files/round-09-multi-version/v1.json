@@ -1,0 +1,9 @@
+{
+  "name": "data-diff-tool",
+  "version": 1,
+  "features": {
+    "text": true,
+    "json": true
+  },
+  "status": "draft"
+}
