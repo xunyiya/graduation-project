@@ -267,6 +267,7 @@ export interface VersionTrendSummary {
 
 export interface VersionChainResponse {
   success: boolean;
+  chainId?: string;
   jobId?: string;
   fileType: SupportedFileType;
   versions: VersionInfo[];
@@ -288,6 +289,7 @@ export interface ExportOptions {
 export interface ExportRequestBody {
   compareResult: CompareResponse;
   options: ExportOptions;
+  jobId?: string | number | null;
   selectedDiffId?: string | null;
 }
 

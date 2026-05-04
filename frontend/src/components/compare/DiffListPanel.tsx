@@ -1,10 +1,12 @@
-import type { DiffLineType } from '../../types/api';
+import type { DiffAnnotation, DiffLineType } from '../../types/api';
 import type { DiffListEntry } from './diffNavigation';
 import { VirtualList } from './VirtualList';
 
 interface DiffListPanelProps {
   activeDiffId: string | null;
+  annotations?: Record<string, DiffAnnotation>;
   entries: DiffListEntry[];
+  onAnnotate?: (entry: DiffListEntry) => void;
   onJump: (diffId: string) => void;
 }
 
@@ -29,7 +31,13 @@ function formatValue(value: string | null) {
   return value.length > 42 ? `${value.slice(0, 42)}...` : value;
 }
 
-export function DiffListPanel({ activeDiffId, entries, onJump }: DiffListPanelProps) {
+export function DiffListPanel({
+  activeDiffId,
+  annotations = {},
+  entries,
+  onAnnotate,
+  onJump
+}: DiffListPanelProps) {
   const activeIndex = entries.findIndex((entry) => entry.diffId === activeDiffId);
 
   function jumpByOffset(offset: number) {
@@ -72,24 +80,36 @@ export function DiffListPanel({ activeDiffId, entries, onJump }: DiffListPanelPr
           items={entries}
           overscan={6}
           renderItem={(entry, index) => (
-            <button
+            <div
               className={`diff-list-item ${entry.type}${entry.diffId === activeDiffId ? ' active' : ''}`}
-              onClick={() => onJump(entry.diffId)}
-              type="button"
             >
-              <span className="diff-list-index">{index + 1}</span>
-              <span className="diff-list-main">
-                <strong>{entry.label}</strong>
-                <code>{entry.path}</code>
-                <small>
-                  {formatValue(entry.leftValue)} {'->'} {formatValue(entry.rightValue)}
-                </small>
-              </span>
-              <span className="diff-list-badges">
-                <em>{kindLabels[entry.kind]}</em>
-                <em>{typeLabels[entry.type]}</em>
-              </span>
-            </button>
+              <button className="diff-list-select" onClick={() => onJump(entry.diffId)} type="button">
+                <span className="diff-list-index">{index + 1}</span>
+                <span className="diff-list-main">
+                  <strong>{entry.label}</strong>
+                  <code>{entry.path}</code>
+                  <small>
+                    {formatValue(entry.leftValue)} {'->'} {formatValue(entry.rightValue)}
+                  </small>
+                </span>
+                <span className="diff-list-badges">
+                  <em>{kindLabels[entry.kind]}</em>
+                  <em>{typeLabels[entry.type]}</em>
+                  {annotations[entry.diffId] && (
+                    <em className="annotation-badge">
+                      {annotations[entry.diffId].resolved ? '已处理' : annotations[entry.diffId].tag ?? '备注'}
+                    </em>
+                  )}
+                </span>
+              </button>
+              <button
+                className="annotation-open-button"
+                onClick={() => onAnnotate?.(entry)}
+                type="button"
+              >
+                备注
+              </button>
+            </div>
           )}
         />
       )}

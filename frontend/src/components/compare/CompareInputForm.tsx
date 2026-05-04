@@ -1,12 +1,16 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import type { FormEvent } from 'react';
 
 import type { DiffFilterKey, DiffFilterOptions, RequestFileType } from '../../types/api';
 
 interface CompareInputFormProps {
+  advancedRules: AdvancedRuleFormState;
   filters: DiffFilterOptions;
+  normalization: NormalizationFormState;
   requestFileType: RequestFileType;
   submitting: boolean;
+  onAdvancedRulesChange: (nextState: Partial<AdvancedRuleFormState>) => void;
   onFilterChange: (key: DiffFilterKey, enabled: boolean) => void;
+  onNormalizationChange: (nextState: Partial<NormalizationFormState>) => void;
   onRequestFileTypeChange: (fileType: RequestFileType) => void;
   onSubmit: (formData: FormData) => void;
 }
@@ -17,9 +21,10 @@ const filterControls: Array<{ key: DiffFilterKey; label: string }> = [
   { key: 'ignoreComments', label: '忽略注释内容（// 和 #）' }
 ];
 
-const advancedRulesStorageKey = 'data-diff-visualizer-advanced-rules';
+export const advancedRulesStorageKey = 'data-diff-visualizer-advanced-rules';
+export const normalizationStorageKey = 'data-diff-visualizer-normalization';
 
-interface AdvancedRuleFormState {
+export interface AdvancedRuleFormState {
   enabled: boolean;
   textIgnoredLineKeywords: string;
   textIgnoredRegexPatterns: string;
@@ -32,7 +37,18 @@ interface AdvancedRuleFormState {
   tableNumericTolerance: string;
 }
 
-const defaultAdvancedRuleFormState: AdvancedRuleFormState = {
+export interface NormalizationFormState {
+  enabled: boolean;
+  ignoreJsonFieldOrder: boolean;
+  ignoredJsonFields: string;
+  emptyValuesEquivalent: boolean;
+  numericToleranceEnabled: boolean;
+  numericTolerance: string;
+  normalizeDateFormat: boolean;
+  tablePrimaryKeyColumns: string;
+}
+
+export const defaultAdvancedRuleFormState: AdvancedRuleFormState = {
   enabled: false,
   textIgnoredLineKeywords: '',
   textIgnoredRegexPatterns: '',
@@ -45,7 +61,18 @@ const defaultAdvancedRuleFormState: AdvancedRuleFormState = {
   tableNumericTolerance: '0.01'
 };
 
-function loadAdvancedRuleFormState() {
+export const defaultNormalizationFormState: NormalizationFormState = {
+  enabled: false,
+  ignoreJsonFieldOrder: true,
+  ignoredJsonFields: 'timestamp, updatedAt, createTime',
+  emptyValuesEquivalent: false,
+  numericToleranceEnabled: false,
+  numericTolerance: '0.01',
+  normalizeDateFormat: false,
+  tablePrimaryKeyColumns: ''
+};
+
+export function loadAdvancedRuleFormState() {
   if (typeof window === 'undefined') {
     return defaultAdvancedRuleFormState;
   }
@@ -66,31 +93,52 @@ function loadAdvancedRuleFormState() {
   }
 }
 
+export function loadNormalizationFormState() {
+  if (typeof window === 'undefined') {
+    return defaultNormalizationFormState;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(normalizationStorageKey);
+
+    if (!storedValue) {
+      return defaultNormalizationFormState;
+    }
+
+    return {
+      ...defaultNormalizationFormState,
+      ...(JSON.parse(storedValue) as Partial<NormalizationFormState>)
+    };
+  } catch {
+    return defaultNormalizationFormState;
+  }
+}
+
 export function CompareInputForm({
+  advancedRules,
   filters,
+  normalization,
   requestFileType,
   submitting,
+  onAdvancedRulesChange,
   onFilterChange,
+  onNormalizationChange,
   onRequestFileTypeChange,
   onSubmit
 }: CompareInputFormProps) {
-  const [advancedRules, setAdvancedRules] = useState<AdvancedRuleFormState>(defaultAdvancedRuleFormState);
-
-  useEffect(() => {
-    setAdvancedRules(loadAdvancedRuleFormState());
-  }, []);
-
   function updateAdvancedRules(nextState: Partial<AdvancedRuleFormState>) {
-    setAdvancedRules((currentState) => ({
-      ...currentState,
-      ...nextState
-    }));
+    onAdvancedRulesChange(nextState);
+  }
+
+  function updateNormalization(nextState: Partial<NormalizationFormState>) {
+    onNormalizationChange(nextState);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(advancedRulesStorageKey, JSON.stringify(advancedRules));
+      window.localStorage.setItem(normalizationStorageKey, JSON.stringify(normalization));
     }
     onSubmit(new FormData(event.currentTarget));
   }
@@ -190,7 +238,13 @@ export function CompareInputForm({
             <p>在正式 diff 前对 JSON、CSV、Excel 执行规则型预处理，减少结构化数据中的噪声差异。</p>
           </div>
           <label className="switch-row">
-            <input name="normalizationEnabled" type="checkbox" value="true" />
+            <input
+              checked={normalization.enabled}
+              name="normalizationEnabled"
+              onChange={(event) => updateNormalization({ enabled: event.currentTarget.checked })}
+              type="checkbox"
+              value="true"
+            />
             启用
           </label>
         </div>
@@ -199,33 +253,67 @@ export function CompareInputForm({
           <div className="normalization-group">
             <strong>JSON 规则</strong>
             <label className="check-row">
-              <input defaultChecked name="ignoreJsonFieldOrder" type="checkbox" value="true" />
+              <input
+                checked={normalization.ignoreJsonFieldOrder}
+                name="ignoreJsonFieldOrder"
+                onChange={(event) => updateNormalization({ ignoreJsonFieldOrder: event.currentTarget.checked })}
+                type="checkbox"
+                value="true"
+              />
               忽略字段顺序
             </label>
             <label className="check-row">
-              <input name="emptyValuesEquivalent" type="checkbox" value="true" />
+              <input
+                checked={normalization.emptyValuesEquivalent}
+                name="emptyValuesEquivalent"
+                onChange={(event) => updateNormalization({ emptyValuesEquivalent: event.currentTarget.checked })}
+                type="checkbox"
+                value="true"
+              />
               null、空字符串、undefined 视为等价
             </label>
             <label className="check-row">
-              <input name="normalizeDateFormat" type="checkbox" value="true" />
+              <input
+                checked={normalization.normalizeDateFormat}
+                name="normalizeDateFormat"
+                onChange={(event) => updateNormalization({ normalizeDateFormat: event.currentTarget.checked })}
+                type="checkbox"
+                value="true"
+              />
               日期格式归一化
             </label>
             <label>
               忽略字段
               <input
-                defaultValue="timestamp, updatedAt, createTime"
                 name="ignoredJsonFields"
+                onChange={(event) => updateNormalization({ ignoredJsonFields: event.currentTarget.value })}
                 placeholder="timestamp, updatedAt, createTime"
+                value={normalization.ignoredJsonFields}
               />
             </label>
             <div className="inline-field-grid">
               <label className="check-row">
-                <input name="numericToleranceEnabled" type="checkbox" value="true" />
+                <input
+                  checked={normalization.numericToleranceEnabled}
+                  name="numericToleranceEnabled"
+                  onChange={(event) =>
+                    updateNormalization({ numericToleranceEnabled: event.currentTarget.checked })
+                  }
+                  type="checkbox"
+                  value="true"
+                />
                 启用数值容差
               </label>
               <label>
                 容差
-                <input defaultValue="0.01" min="0" name="numericTolerance" step="0.001" type="number" />
+                <input
+                  min="0"
+                  name="numericTolerance"
+                  onChange={(event) => updateNormalization({ numericTolerance: event.currentTarget.value })}
+                  step="0.001"
+                  type="number"
+                  value={normalization.numericTolerance}
+                />
               </label>
             </div>
           </div>
@@ -234,7 +322,12 @@ export function CompareInputForm({
             <strong>CSV / Excel 规则</strong>
             <label>
               主键列
-              <input name="tablePrimaryKeyColumns" placeholder="id, userId 或 A" />
+              <input
+                name="tablePrimaryKeyColumns"
+                onChange={(event) => updateNormalization({ tablePrimaryKeyColumns: event.currentTarget.value })}
+                placeholder="id, userId 或 A"
+                value={normalization.tablePrimaryKeyColumns}
+              />
             </label>
             <p>
               填写后将按主键值对齐数据行，行顺序变化会作为归一化忽略项记录。

@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 
 import { fetchCurrentUser, loginUser, logoutUser, registerUser } from '../services/auth.service';
+import { applyThemePreference } from '../services/ruleState.service';
 import { clearAuthToken, getAuthToken, setAuthToken } from '../services/token.service';
+import { fetchUserSettings } from '../services/userSettings.service';
 import type { User } from '../types/api';
 
 interface AuthContextValue {
@@ -36,6 +38,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setLoading(false);
       });
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      applyThemePreference('light');
+      return;
+    }
+
+    fetchUserSettings()
+      .then((settings) => {
+        applyThemePreference(settings.theme);
+      })
+      .catch(() => undefined);
+  }, [user]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -1,104 +1,135 @@
 # 数据差异对比可视化工具
 
 ## 项目简介
-本项目是一个用于数据差异对比可视化的毕业设计系统，面向纯文本文件和结构化文件（JSON、CSV、Excel）提供差异检测、结果可视化、结果导出和历史记录管理功能。
+本项目是一个面向毕业设计场景的数据差异分析平台，支持文本、JSON、CSV 和 Excel 文件的差异检测、结构化展示、规则过滤、结果导出、任务追踪和统计分析。系统从早期的简单历史记录逐步扩展为以 SQLite 为核心的数据管理平台，适合在论文中展示“对比处理、结果沉淀、审计追踪、统计看板”的完整闭环。
 
-## 项目目标
-1. 支持纯文本、JSON、CSV、Excel 文件的差异对比
-2. 支持文件上传、路径导入、文本粘贴三种输入方式
-3. 支持忽略空白字符、忽略注释、忽略大小写等过滤规则
-4. 支持分栏对比、高亮展示、树形结构视图、差异统计、差异跳转
-5. 支持结果导出为 HTML 和 PDF
-6. 支持用户登录、按用户隔离的历史比对记录保存和回溯
-7. 支持大文件处理优化，如分块加载、增量渲染、虚拟滚动
+## 核心功能
+- 文本、JSON、CSV、Excel 对比：支持自动识别或手动指定文件类型。
+- 基础过滤：忽略空白、忽略大小写、忽略单行注释。
+- 高级规则：忽略文本关键词、正则内容、JSON 字段/路径、数组顺序、表格列/行和数值容差。
+- 归一化处理：JSON 字段顺序、空值等价、数值容差、日期格式、表格主键列对齐。
+- 多版本连续对比：上传 v1、v2、v3 等多个版本，生成区间差异和趋势摘要。
+- 对比任务中心：保存每次对比的任务元信息、参与文件和完整结果。
+- 文件记录：保存上传文件元数据，包括大小、哈希、来源和文件类型。
+- 筛选规则预设：保存常用规则，下次对比时一键应用。
+- 用户默认设置：保存默认文件类型、默认过滤/高级/归一化规则和主题。
+- 差异备注与标记：对单条差异添加备注、标签和处理状态。
+- 导出记录：记录 HTML/PDF 报告导出行为，支撑审计追踪。
+- 数据看板：统计任务数、差异数、导出次数、文件类型分布和 7 天趋势。
 
 ## 技术栈
-### 前端
+前端：
 - React
 - TypeScript
 - Vite
 - React Router
 - Context API
 
-### 后端
+后端：
 - Node.js
 - Express
 - TypeScript
+- SQLite
 - multer
 - exceljs
 - csv-parse
 - bcryptjs
 - JWT
-- SQLite
-
-## 当前开发原则
-1. 先做最小可运行版本，再逐步扩展
-2. 先完成文本 diff，再完成 JSON，再完成 CSV/Excel
-3. 先保证功能可用，再做导出、历史记录和性能优化
-4. 每完成一个模块都补基础测试和文档
+- pdfkit
 
 ## 工程结构
 ```text
 .
-├── frontend/        # React + TypeScript + Vite 前端工程
-├── backend/         # Node.js + Express + TypeScript 后端工程
-├── docs/            # 毕设文档与开发规划
-├── package.json     # npm workspace 统一脚本
+├── frontend/                 # React + TypeScript + Vite 前端工程
+├── backend/                  # Node.js + Express + TypeScript 后端工程
+├── docs/                     # 毕设文档、数据库说明和论文材料
+├── test-files/               # 分轮次整理的上传测试文件
+├── package.json              # npm workspace 统一脚本
 └── package-lock.json
 ```
 
-## 安装依赖
+## 启动方式
+安装依赖：
 ```bash
 npm install
 ```
 
-如果当前终端找不到 `npm`，但 Node 通过 Homebrew 安装在默认位置，可以临时执行：
-```bash
-export PATH="/opt/homebrew/bin:$PATH"
-```
-
-## 启动项目
 同时启动前端和后端：
 ```bash
 npm run dev
 ```
 
-启动后访问：
-- 前端：`http://localhost:5173`
-- 后端健康检查：`http://localhost:3001/api/health`
-
-SQLite 数据库默认自动创建在：
-```text
-/Users/xunyi/Desktop/毕设系统/backend/data/app.db
-```
-
-如需自定义路径或 JWT 密钥，可复制 `backend/.env.example` 为 `backend/.env` 后调整 `DATABASE_PATH`、`JWT_SECRET`。
-
-也可以单独启动：
+单独启动：
 ```bash
 npm run dev:frontend
 npm run dev:backend
 ```
 
-## 验证命令
-```bash
-npm run typecheck
-npm test
-npm run build
+默认访问地址：
+- 前端：`http://localhost:5173`
+- 后端健康检查：`http://localhost:3001/api/health`
+
+SQLite 数据库默认路径：
+```text
+backend/data/app.db
 ```
 
-## 当前阶段状态
-- 已完成 `frontend` 和 `backend` 工程骨架。
-- 已配置 React Router、Vite 代理、Express 路由、multer 文件上传。
-- `/api/health` 可用于检查后端状态。
-- `/api/diff/compare` 已支持纯文本逐行 diff、字符级行内高亮、空白/大小写/单行注释过滤。
-- `/api/diff/compare` 已支持 JSON 自动识别、树结构解析、新增/删除/修改节点检测和树形结果返回。
-- `/api/diff/compare` 已支持 CSV 行列差异和 Excel 工作表/单元格差异。
-- 结果项已增加统一 `meta`，前端已支持统一差异统计、差异列表和差异跳转。
-- `/api/export/html` 和 `/api/export/pdf` 已支持基于当前结果导出报告。
-- `/login` 已支持注册、登录和保持登录状态，侧边栏显示当前用户和退出按钮。
-- `/history` 已支持基于 SQLite 的用户隔离历史记录查看、删除和重新打开。
-- 过滤逻辑在后端预处理阶段执行，diff 阶段比较预处理后的内容，前端展示保留原始文本。
-- 大文本和大表格视图已加入虚拟滚动，后端结果集带性能元信息和截断提示。
-- `test-files` 目录按开发轮次存放可上传测试文件。
-- 浏览器 localStorage 仅作为历史记录保存失败时的兼容兜底，主流程走后端 SQLite。
+如需自定义数据库路径或 JWT 密钥，可复制 `backend/.env.example` 为 `backend/.env` 后调整：
+```text
+DATABASE_PATH=backend/data/app.db
+JWT_SECRET=your-secret
+```
+
+## 验证命令
+```bash
+npm run build
+npm test
+npm run typecheck
+```
+
+其中：
+- `npm run build`：构建前后端，前端执行 `tsc --noEmit && vite build`，后端执行 `tsc`。
+- `npm test`：构建后端并运行 `backend/test/*.test.mjs`。
+- `npm run typecheck`：对所有 workspace 执行 TypeScript 类型检查。
+
+## 页面路径
+- `/`：工作台首页。
+- `/dashboard`：数据看板，展示统计卡片、分布图、7 天趋势和最近任务。
+- `/compare`：数据对比工作台，支持双文件和多版本连续对比。
+- `/jobs`：对比任务中心，展示任务详情、导出记录和多版本记录。
+- `/history`：旧版历史记录，兼容 `history_records` 表。
+- `/files`：文件记录，展示上传文件元数据。
+- `/settings`：个人设置，配置默认规则和主题。
+- `/login`：登录与注册。
+
+## 数据库表说明
+系统当前使用 SQLite，核心表包括：
+- `users`：用户账号。
+- `history_records`：旧版历史记录，保留兼容原历史功能。
+- `uploaded_files`：上传文件元数据。
+- `compare_jobs`：对比任务主表。
+- `compare_job_files`：任务参与文件关联表。
+- `compare_results`：任务完整结果表。
+- `export_records`：导出审计记录。
+- `filter_presets`：用户规则预设。
+- `user_settings`：用户默认设置。
+- `diff_annotations`：差异备注与标记。
+- `version_chains`：多版本对比链。
+- `version_chain_files`：版本链文件明细。
+
+更完整的字段、外键和索引说明见 [docs/database-schema.md](docs/database-schema.md)。
+
+## 测试覆盖
+后端测试覆盖：
+- 数据库表和关键索引创建。
+- 外键级联删除和 `ON DELETE SET NULL`。
+- 用户隔离访问。
+- 对比任务创建、查询、删除和完整 JSON 结果恢复。
+- 文件记录、规则预设、用户设置、差异备注、导出记录、版本链记录。
+- 数据看板统计口径。
+- 文本、JSON、CSV、Excel、多版本对比和导出服务。
+
+## 论文材料
+- [docs/database-schema.md](docs/database-schema.md)：数据库结构说明。
+- [docs/thesis-database-update.md](docs/thesis-database-update.md)：第四章数据库设计改进材料。
+- [docs/thesis-feature-update.md](docs/thesis-feature-update.md)：第五章功能实现与第六章测试材料。

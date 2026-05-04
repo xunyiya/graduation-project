@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 
 import { database } from './database.service.js';
+import { ensureUserSettings } from './userSettings.service.js';
 
 export interface UserRecord {
   id: number;
@@ -67,6 +68,8 @@ export async function createUser(username: string, password: string): Promise<Us
   if (!user) {
     throw new Error('用户创建失败');
   }
+
+  ensureUserSettings(user.id);
 
   return user;
 }

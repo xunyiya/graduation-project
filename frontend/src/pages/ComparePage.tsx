@@ -1,14 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { ActiveFiltersPanel } from '../components/compare/ActiveFiltersPanel';
 import { AdvancedRulesSummaryPanel } from '../components/compare/AdvancedRulesSummaryPanel';
-import { CompareInputForm } from '../components/compare/CompareInputForm';
+import {
+  CompareInputForm,
+  defaultAdvancedRuleFormState,
+  defaultNormalizationFormState,
+  loadAdvancedRuleFormState,
+  loadNormalizationFormState,
+  type AdvancedRuleFormState,
+  type NormalizationFormState
+} from '../components/compare/CompareInputForm';
+import { DiffAnnotationPanel } from '../components/compare/DiffAnnotationPanel';
 import { DiffListPanel } from '../components/compare/DiffListPanel';
 import { DiffResultViewer } from '../components/compare/DiffResultViewer';
 import { DiffSummaryPanel } from '../components/compare/DiffSummaryPanel';
 import { ErrorMessage } from '../components/compare/ErrorMessage';
 import { ExportPanel } from '../components/compare/ExportPanel';
+import { FilterPresetManager } from '../components/compare/FilterPresetManager';
+import { FilterPresetPanel } from '../components/compare/FilterPresetPanel';
 import { JsonTreeDiffViewer } from '../components/compare/JsonTreeDiffViewer';
 import { MultiVersionCompareForm } from '../components/compare/MultiVersionCompareForm';
 import { NormalizationSummaryPanel } from '../components/compare/NormalizationSummaryPanel';
@@ -16,17 +27,38 @@ import { PerformanceNotice } from '../components/compare/PerformanceNotice';
 import { TableDiffViewer } from '../components/compare/TableDiffViewer';
 import { VersionTimelinePanel } from '../components/compare/VersionTimelinePanel';
 import { findDensestRegion } from '../components/compare/diffDensity';
-import { flattenChangedDiffItems } from '../components/compare/diffNavigation';
+import { flattenChangedDiffItems, type DiffListEntry } from '../components/compare/diffNavigation';
 import { compareFiles, compareVersionFiles } from '../services/api';
+import {
+  createDiffAnnotation,
+  listDiffAnnotations,
+  updateDiffAnnotation
+} from '../services/diffAnnotation.service';
 import { exportCompareResult } from '../services/export.service';
+import {
+  createFilterPreset,
+  deleteFilterPreset,
+  listFilterPresets,
+  setDefaultFilterPreset,
+  updateFilterPreset
+} from '../services/filterPreset.service';
 import { addHistoryRecord } from '../services/history.service';
+import {
+  applyThemePreference,
+  normalizeAdvancedRulesForForm,
+  normalizeFiltersForForm,
+  normalizeNormalizationForForm
+} from '../services/ruleState.service';
+import { fetchUserSettings } from '../services/userSettings.service';
 import type {
   CompareResponse,
+  DiffAnnotation,
   DiffFilterKey,
   DiffFilterOptions,
   DiffLineItem,
   DiffResultItem,
   ExportOptions,
+  FilterPreset,
   JsonDiffNode,
   RequestFileType,
   TableDiffItem,
@@ -119,6 +151,7 @@ function renderDiffViewer({
 export function ComparePage() {
   const location = useLocation();
   const locationState = location.state as CompareLocationState | null;
+  const presetAppliedRef = useRef(false);
   const [response, setResponse] = useState<CompareResponse | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -131,9 +164,23 @@ export function ComparePage() {
   const [activeVersionDiffId, setActiveVersionDiffId] = useState<string | null>(null);
   const [exportingFormat, setExportingFormat] = useState<'html' | 'pdf' | null>(null);
   const [filterOptions, setFilterOptions] = useState<DiffFilterOptions>(defaultFilterOptions);
+  const [advancedRules, setAdvancedRules] = useState<AdvancedRuleFormState>(defaultAdvancedRuleFormState);
+  const [normalization, setNormalization] =
+    useState<NormalizationFormState>(defaultNormalizationFormState);
   const [requestFileType, setRequestFileType] = useState<RequestFileType>('auto');
   const [exportOptions, setExportOptions] = useState<ExportOptions>(defaultExportOptions);
   const [activeDiffId, setActiveDiffId] = useState<string | null>(null);
+  const [filterPresets, setFilterPresets] = useState<FilterPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [presetName, setPresetName] = useState('');
+  const [presetDescription, setPresetDescription] = useState('');
+  const [presetLoading, setPresetLoading] = useState(true);
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetBusyId, setPresetBusyId] = useState<string | null>(null);
+  const [showPresetManager, setShowPresetManager] = useState(false);
+  const [annotationsByDiffId, setAnnotationsByDiffId] = useState<Record<string, DiffAnnotation>>({});
+  const [annotationEntry, setAnnotationEntry] = useState<DiffListEntry | null>(null);
+  const [annotationSaving, setAnnotationSaving] = useState(false);
   const diffEntries = useMemo(
     () => (response ? flattenChangedDiffItems(response.result) : []),
     [response]
@@ -164,6 +211,63 @@ export function ComparePage() {
   const activeVersionDiffIndex = versionDiffEntries.findIndex(
     (entry) => entry.diffId === activeVersionDiffId
   );
+  const currentJobId = response?.jobId ?? versionResponse?.jobId ?? null;
+
+  useEffect(() => {
+    setAdvancedRules(loadAdvancedRuleFormState());
+    setNormalization(loadNormalizationFormState());
+  }, []);
+
+  useEffect(() => {
+    fetchUserSettings()
+      .then((settings) => {
+        applyThemePreference(settings.theme);
+
+        if (presetAppliedRef.current) {
+          return;
+        }
+
+        setRequestFileType(settings.defaultFileType);
+        setFilterOptions(normalizeFiltersForForm(settings.defaultFilters));
+        setAdvancedRules(normalizeAdvancedRulesForForm(settings.defaultAdvancedRules));
+        setNormalization(normalizeNormalizationForForm(settings.defaultNormalization));
+      })
+      .catch((requestError: unknown) => {
+        setNotice(requestError instanceof Error ? requestError.message : '个人默认设置加载失败');
+      });
+  }, []);
+
+  useEffect(() => {
+    listFilterPresets()
+      .then((presets) => {
+        setFilterPresets(presets);
+        setSelectedPresetId((currentId) => currentId || presets.find((preset) => preset.isDefault)?.id || '');
+      })
+      .catch((requestError: unknown) => {
+        setNotice(requestError instanceof Error ? requestError.message : '规则预设加载失败');
+      })
+      .finally(() => {
+        setPresetLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!currentJobId) {
+      setAnnotationsByDiffId({});
+      setAnnotationEntry(null);
+      return;
+    }
+
+    listDiffAnnotations(currentJobId)
+      .then((annotations) => {
+        setAnnotationsByDiffId(
+          Object.fromEntries(annotations.map((annotation) => [annotation.diffId, annotation]))
+        );
+      })
+      .catch((requestError: unknown) => {
+        setNotice(requestError instanceof Error ? requestError.message : '差异备注加载失败');
+      });
+  }, [currentJobId]);
 
   useEffect(() => {
     if (locationState?.versionResult) {
@@ -202,6 +306,166 @@ export function ComparePage() {
     }));
   }
 
+  function handleAdvancedRulesChange(nextState: Partial<AdvancedRuleFormState>) {
+    setAdvancedRules((currentState) => ({
+      ...currentState,
+      ...nextState
+    }));
+  }
+
+  function handleNormalizationChange(nextState: Partial<NormalizationFormState>) {
+    setNormalization((currentState) => ({
+      ...currentState,
+      ...nextState
+    }));
+  }
+
+  function handleApplyPreset() {
+    const preset = filterPresets.find((item) => item.id === selectedPresetId);
+
+    if (!preset) {
+      return;
+    }
+
+    presetAppliedRef.current = true;
+    setFilterOptions(preset.filters);
+    setAdvancedRules(normalizeAdvancedRulesForForm(preset.advancedRules));
+    setNormalization(normalizeNormalizationForForm(preset.normalization));
+    setRequestFileType(preset.fileType);
+    setNotice(`已应用规则预设：${preset.name}`);
+  }
+
+  async function refreshFilterPresets(selectedId?: string) {
+    const presets = await listFilterPresets();
+
+    setFilterPresets(presets);
+    setSelectedPresetId(selectedId ?? presets.find((preset) => preset.isDefault)?.id ?? '');
+    return presets;
+  }
+
+  async function handleSavePreset() {
+    const name = presetName.trim();
+
+    if (!name) {
+      return;
+    }
+
+    setPresetSaving(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const preset = await createFilterPreset({
+        name,
+        description: presetDescription.trim() || null,
+        fileType: requestFileType,
+        filters: filterOptions,
+        advancedRules,
+        normalization
+      });
+
+      await refreshFilterPresets(preset.id);
+      setPresetName('');
+      setPresetDescription('');
+      setNotice(`已保存规则预设：${preset.name}`);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '规则预设保存失败');
+    } finally {
+      setPresetSaving(false);
+    }
+  }
+
+  async function handleUpdatePreset(
+    presetId: string,
+    input: {
+      name: string;
+      description: string | null;
+      fileType: RequestFileType;
+    }
+  ) {
+    setPresetBusyId(presetId);
+    setError('');
+
+    try {
+      await updateFilterPreset(presetId, input);
+      await refreshFilterPresets(presetId);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '规则预设更新失败');
+    } finally {
+      setPresetBusyId(null);
+    }
+  }
+
+  async function handleDeletePreset(presetId: string) {
+    setPresetBusyId(presetId);
+    setError('');
+
+    try {
+      await deleteFilterPreset(presetId);
+      await refreshFilterPresets(selectedPresetId === presetId ? undefined : selectedPresetId);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '规则预设删除失败');
+    } finally {
+      setPresetBusyId(null);
+    }
+  }
+
+  async function handleSetDefaultPreset(presetId: string) {
+    setPresetBusyId(presetId);
+    setError('');
+
+    try {
+      await setDefaultFilterPreset(presetId);
+      await refreshFilterPresets(presetId);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '默认规则预设设置失败');
+    } finally {
+      setPresetBusyId(null);
+    }
+  }
+
+  function handleOpenAnnotation(entry: DiffListEntry) {
+    setAnnotationEntry(entry);
+
+    if (response) {
+      setActiveDiffId(entry.diffId);
+    }
+
+    if (versionResponse) {
+      setActiveVersionDiffId(entry.diffId);
+    }
+  }
+
+  async function handleSaveAnnotation(input: { note: string; tag: DiffAnnotation['tag']; resolved: boolean }) {
+    if (!currentJobId || !annotationEntry) {
+      return;
+    }
+
+    setAnnotationSaving(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const existingAnnotation = annotationsByDiffId[annotationEntry.diffId];
+      const annotation = existingAnnotation
+        ? await updateDiffAnnotation(existingAnnotation.id, input)
+        : await createDiffAnnotation(currentJobId, {
+            diffId: annotationEntry.diffId,
+            ...input
+          });
+
+      setAnnotationsByDiffId((currentAnnotations) => ({
+        ...currentAnnotations,
+        [annotation.diffId]: annotation
+      }));
+      setNotice('差异备注已保存。');
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : '差异备注保存失败');
+    } finally {
+      setAnnotationSaving(false);
+    }
+  }
+
   async function handleSubmit(formData: FormData) {
     setSubmitting(true);
     setError('');
@@ -210,6 +474,7 @@ export function ComparePage() {
     setVersionNotice('');
     setResponse(null);
     setVersionResponse(null);
+    setAnnotationEntry(null);
     setActiveDiffId(null);
     setActiveVersionIntervalId(null);
     setActiveVersionDiffId(null);
@@ -248,6 +513,7 @@ export function ComparePage() {
     setNotice('');
     setResponse(null);
     setVersionResponse(null);
+    setAnnotationEntry(null);
     setActiveDiffId(null);
     setActiveVersionIntervalId(null);
     setActiveVersionDiffId(null);
@@ -284,13 +550,14 @@ export function ComparePage() {
     setExportingFormat(format);
 
     try {
-      await exportCompareResult({
+      const exportResult = await exportCompareResult({
         compareResult: response,
         format,
+        jobId: currentJobId,
         options: exportOptions,
         selectedDiffId: activeDiffId
       });
-      setNotice(`已生成 ${format.toUpperCase()} 导出文件。`);
+      setNotice(`已生成 ${format.toUpperCase()} 导出文件：${exportResult.fileName}`);
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : '导出失败');
     } finally {
@@ -316,9 +583,38 @@ export function ComparePage() {
         </div>
       </header>
 
+      <FilterPresetPanel
+        description={presetDescription}
+        loading={presetLoading}
+        name={presetName}
+        onApply={handleApplyPreset}
+        onDescriptionChange={setPresetDescription}
+        onNameChange={setPresetName}
+        onSave={() => void handleSavePreset()}
+        onSelectedPresetIdChange={setSelectedPresetId}
+        onToggleManager={() => setShowPresetManager((currentValue) => !currentValue)}
+        presets={filterPresets}
+        saving={presetSaving}
+        selectedPresetId={selectedPresetId}
+        showManager={showPresetManager}
+      />
+      {showPresetManager && (
+        <FilterPresetManager
+          busyPresetId={presetBusyId}
+          onDelete={(presetId) => void handleDeletePreset(presetId)}
+          onSetDefault={(presetId) => void handleSetDefaultPreset(presetId)}
+          onUpdate={(presetId, input) => void handleUpdatePreset(presetId, input)}
+          presets={filterPresets}
+        />
+      )}
+
       <CompareInputForm
+        advancedRules={advancedRules}
         filters={filterOptions}
+        normalization={normalization}
+        onAdvancedRulesChange={handleAdvancedRulesChange}
         onFilterChange={handleFilterChange}
+        onNormalizationChange={handleNormalizationChange}
         onRequestFileTypeChange={setRequestFileType}
         onSubmit={handleSubmit}
         requestFileType={requestFileType}
@@ -365,8 +661,18 @@ export function ComparePage() {
           />
           <DiffListPanel
             activeDiffId={activeDiffId}
+            annotations={annotationsByDiffId}
             entries={diffEntries}
+            onAnnotate={handleOpenAnnotation}
             onJump={setActiveDiffId}
+          />
+          <DiffAnnotationPanel
+            annotation={annotationEntry ? (annotationsByDiffId[annotationEntry.diffId] ?? null) : null}
+            diff={annotationEntry}
+            disabled={!currentJobId}
+            onCancel={() => setAnnotationEntry(null)}
+            onSave={(input) => void handleSaveAnnotation(input)}
+            saving={annotationSaving}
           />
           {renderDiffViewer({
             activeDiffId,
@@ -408,8 +714,18 @@ export function ComparePage() {
           />
           <DiffListPanel
             activeDiffId={activeVersionDiffId}
+            annotations={annotationsByDiffId}
             entries={versionDiffEntries}
+            onAnnotate={handleOpenAnnotation}
             onJump={setActiveVersionDiffId}
+          />
+          <DiffAnnotationPanel
+            annotation={annotationEntry ? (annotationsByDiffId[annotationEntry.diffId] ?? null) : null}
+            diff={annotationEntry}
+            disabled={!currentJobId}
+            onCancel={() => setAnnotationEntry(null)}
+            onSave={(input) => void handleSaveAnnotation(input)}
+            saving={annotationSaving}
           />
           {renderDiffViewer({
             activeDiffId: activeVersionDiffId,

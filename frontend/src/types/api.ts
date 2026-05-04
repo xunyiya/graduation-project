@@ -291,6 +291,7 @@ export interface VersionTrendSummary {
 
 export interface VersionChainResponse {
   success: boolean;
+  chainId?: string;
   jobId?: string;
   fileType: FileType;
   versions: VersionInfo[];
@@ -312,6 +313,7 @@ export interface ExportOptions {
 export interface ExportRequestBody {
   compareResult: CompareResponse;
   options: ExportOptions;
+  jobId?: string | number | null;
   selectedDiffId?: string | null;
 }
 
@@ -363,4 +365,108 @@ export interface CompareJobRecord {
   files?: CompareJobFileRecord[];
   compareResult?: CompareResponse;
   versionResult?: VersionChainResponse;
+}
+
+export interface FilterPreset {
+  id: string;
+  name: string;
+  description: string | null;
+  fileType: RequestFileType;
+  filters: DiffFilterOptions;
+  advancedRules: unknown;
+  normalization: unknown;
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type UserTheme = 'light' | 'dark';
+
+export interface UserSettings {
+  userId: number;
+  defaultFileType: RequestFileType;
+  defaultFilters: DiffFilterOptions;
+  defaultAdvancedRules: unknown;
+  defaultNormalization: unknown;
+  theme: UserTheme;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DiffAnnotationTag = '待复查' | '已确认' | '正常变化' | '异常变化';
+
+export interface DiffAnnotation {
+  id: string;
+  jobId: string;
+  diffId: string;
+  note: string;
+  tag: DiffAnnotationTag | null;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExportRecord {
+  id: string;
+  jobId: string | null;
+  jobTitle: string | null;
+  exportType: string;
+  fileName: string;
+  options: ExportOptions | Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface VersionChainFileRecord {
+  id: string;
+  fileId: string | null;
+  versionIndex: number;
+  versionLabel: string;
+  fileName: string;
+  createdAt: string;
+}
+
+export interface VersionChainRecord {
+  id: string;
+  title: string;
+  fileType: FileType;
+  summary: Record<string, unknown>;
+  trend: VersionTrendSummary;
+  versionCount: number;
+  totalDifferences: number;
+  peakIntervalLabel: string | null;
+  createdAt: string;
+  files: VersionChainFileRecord[];
+  versionResult?: VersionChainResponse;
+}
+
+export interface DashboardTrendPoint {
+  date: string;
+  taskCount: number;
+  differenceCount: number;
+}
+
+export interface DashboardRecentJob {
+  id: string;
+  title: string;
+  fileType: FileType;
+  inputMode: 'pair' | 'versions' | string;
+  resultCount: number;
+  resultTruncated: boolean;
+  createdAt: string;
+}
+
+export interface DashboardStats {
+  totalTasks: number;
+  fileTypeCounts: Record<FileType, number>;
+  totalDifferences: number;
+  differenceTypeTotals: {
+    added: number;
+    removed: number;
+    modified: number;
+  };
+  exportCount: number;
+  versionChainCount: number;
+  recent7DaysTaskCount: number;
+  recent7DaysTrend: DashboardTrendPoint[];
+  recentJobs: DashboardRecentJob[];
 }

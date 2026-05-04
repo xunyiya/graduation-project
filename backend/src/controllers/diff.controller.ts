@@ -34,6 +34,10 @@ import {
   emptyVersionChainResponse,
   type VersionChainInput
 } from '../services/versionChain.service.js';
+import {
+  attachVersionChainFile,
+  createVersionChainRecord
+} from '../services/versionChainRecord.service.js';
 import type {
   AppliedFilterInfo,
   CompareResponse,
@@ -186,6 +190,32 @@ function buildPairJobTitle(fileType: SupportedFileType, leftName: string, rightN
   return `${fileType.toUpperCase()} 对比：${leftName} -> ${rightName}`;
 }
 
+function buildVersionJobTitle(fileType: SupportedFileType, versionCount: number) {
+  return `${fileType.toUpperCase()} 多版本对比：${versionCount} 个版本`;
+}
+
+function buildVersionChainSummary(response: VersionChainResponse, compareJobId: number) {
+  return {
+    compareJobId,
+    versionCount: response.versions.length,
+    intervalCount: response.trend.intervalCount,
+    totalDifferences: response.trend.totalDifferences,
+    added: response.trend.added,
+    removed: response.trend.removed,
+    modified: response.trend.modified,
+    peakIntervalId: response.trend.peakIntervalId,
+    peakIntervalLabel: response.trend.peakIntervalLabel,
+    peakDifferenceCount: response.trend.peakDifferenceCount,
+    intervals: response.intervals.map((interval) => ({
+      id: interval.id,
+      fromVersionId: interval.fromVersionId,
+      toVersionId: interval.toVersionId,
+      label: interval.label,
+      summary: interval.summary
+    }))
+  };
+}
+
 async function persistPairCompareJob({
   durationMs,
   fileType,
@@ -272,8 +302,9 @@ async function persistVersionCompareJob({
       userId
     });
     const resultTruncated = response.intervals.some((interval) => interval.performance.resultTruncated);
+    const title = buildVersionJobTitle(fileType, files.length);
     const job = createCompareJob(userId, {
-      title: `${fileType.toUpperCase()} 多版本对比：${files.length} 个版本`,
+      title,
       fileType,
       inputMode: 'versions',
       status: 'completed',
@@ -293,6 +324,23 @@ async function persistVersionCompareJob({
     });
 
     response.jobId = String(job.id);
+    const chain = createVersionChainRecord(userId, {
+      title,
+      fileType,
+      summary: buildVersionChainSummary(response, job.id),
+      trend: response.trend
+    });
+
+    files.forEach((file, index) => {
+      attachVersionChainFile(chain.id, {
+        fileId: fileRecords[index]?.id ?? null,
+        versionIndex: index,
+        versionLabel: response.versions[index]?.label ?? `v${index + 1}`,
+        fileName: file.originalname
+      });
+    });
+
+    response.chainId = String(chain.id);
     saveCompareResult(job.id, response);
   } catch (error) {
     console.warn('多版本对比任务保存失败', error);
