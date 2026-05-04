@@ -219,6 +219,7 @@ export type DiffResultItem = DiffLineItem | JsonDiffNode | TableDiffItem;
 
 export interface CompareResponse {
   success: boolean;
+  jobId?: string;
   fileType: SupportedFileType;
   summary: DiffSummary;
   result: DiffResultItem[];
@@ -266,6 +267,7 @@ export interface VersionTrendSummary {
 
 export interface VersionChainResponse {
   success: boolean;
+  jobId?: string;
   fileType: SupportedFileType;
   versions: VersionInfo[];
   intervals: VersionIntervalCompare[];

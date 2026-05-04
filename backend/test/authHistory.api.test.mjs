@@ -10,6 +10,10 @@ process.env.JWT_SECRET = 'test-secret';
 
 const { createApp } = await import('../dist/app.js');
 const { closeDatabase } = await import('../dist/services/database.service.js');
+const {
+  computeSha256FromBuffer,
+  createUploadedFileRecord
+} = await import('../dist/services/fileRecord.service.js');
 
 const app = createApp();
 const server = app.listen(0);
@@ -155,6 +159,20 @@ test('returns 401 for unauthenticated history access', async () => {
   assert.equal(response.json.success, false);
 });
 
+test('returns 401 for unauthenticated file record access', async () => {
+  const response = await request('GET', '/api/files');
+
+  assert.equal(response.status, 401);
+  assert.equal(response.json.success, false);
+});
+
+test('returns 401 for unauthenticated compare job access', async () => {
+  const response = await request('GET', '/api/jobs');
+
+  assert.equal(response.status, 401);
+  assert.equal(response.json.success, false);
+});
+
 test('lets a logged-in user create, read and delete own history records', async () => {
   const { token } = await register(uniqueUsername('history-owner'));
   const createResponse = await request('POST', '/api/history', {
@@ -205,4 +223,135 @@ test('prevents user A from reading or deleting user B history records', async ()
   assert.equal(readAsA.status, 404);
   assert.equal(deleteAsA.status, 404);
   assert.equal(readAsB.status, 200);
+});
+
+test('lets a logged-in user list, read and delete own file records safely', async () => {
+  const otherUser = await register(uniqueUsername('file-other'));
+  const otherOwner = await request('GET', '/api/auth/me', { token: otherUser.token });
+  const { token } = await register(uniqueUsername('file-owner'));
+  const sha256 = computeSha256FromBuffer(Buffer.from('hello file'));
+  const createdRecord = createUploadedFileRecord(otherOwner.json.data.user.id, {
+    originalName: 'private-left.txt',
+    storedName: 'internal-private-left.txt',
+    fileType: 'text',
+    mimeType: 'text/plain',
+    sizeBytes: 10,
+    sha256,
+    storagePath: '/private/uploads/internal-private-left.txt',
+    sourceType: 'upload'
+  });
+
+  const owner = await request('GET', '/api/auth/me', { token });
+  const userId = owner.json.data.user.id;
+  const ownedRecord = createUploadedFileRecord(userId, {
+    originalName: 'visible-left.txt',
+    storedName: 'internal-visible-left.txt',
+    fileType: 'text',
+    mimeType: 'text/plain',
+    sizeBytes: 12,
+    sha256,
+    storagePath: '/private/uploads/internal-visible-left.txt',
+    sourceType: 'compare-upload'
+  });
+
+  const listResponse = await request('GET', '/api/files', { token });
+  const recordId = String(ownedRecord.id);
+  const listedRecord = listResponse.json.data.find((record) => record.id === recordId);
+  const getResponse = await request('GET', `/api/files/${recordId}`, { token });
+  const otherGetResponse = await request('GET', `/api/files/${createdRecord.id}`, { token });
+  const deleteResponse = await request('DELETE', `/api/files/${recordId}`, { token });
+  const deletedGetResponse = await request('GET', `/api/files/${recordId}`, { token });
+
+  assert.equal(listResponse.status, 200);
+  assert.equal(Boolean(listedRecord), true);
+  assert.equal(listedRecord.fileName, 'visible-left.txt');
+  assert.equal(listedRecord.sha256Prefix, sha256.slice(0, 12));
+  assert.equal('storagePath' in listedRecord, false);
+  assert.equal('storedName' in listedRecord, false);
+  assert.equal(getResponse.status, 200);
+  assert.equal(getResponse.json.data.fileName, 'visible-left.txt');
+  assert.equal(otherGetResponse.status, 404);
+  assert.equal(deleteResponse.status, 200);
+  assert.equal(deletedGetResponse.status, 404);
+});
+
+test('records uploaded file metadata after authenticated compare', async () => {
+  const { token } = await register(uniqueUsername('compare-file-owner'));
+  const leftContent = 'alpha\nbeta\n';
+  const rightContent = 'alpha\ngamma\n';
+  const formData = new FormData();
+
+  formData.append('fileType', 'text');
+  formData.append('leftFile', new Blob([leftContent], { type: 'text/plain' }), 'left.txt');
+  formData.append('rightFile', new Blob([rightContent], { type: 'text/plain' }), 'right.txt');
+
+  const compareResponse = await fetch(`${baseUrl}/api/diff/compare`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: formData
+  });
+  const compareJson = await compareResponse.json();
+  const listResponse = await request('GET', '/api/files', { token });
+  const fileNames = listResponse.json.data.map((record) => record.fileName);
+
+  assert.equal(compareResponse.status, 200);
+  assert.equal(compareJson.success, true);
+  assert.equal(typeof compareJson.jobId, 'string');
+  assert.equal(fileNames.includes('left.txt'), true);
+  assert.equal(fileNames.includes('right.txt'), true);
+  assert.equal(
+    listResponse.json.data.some(
+      (record) =>
+        record.fileName === 'left.txt' &&
+        record.sourceType === 'compare-upload' &&
+        record.sha256Prefix === computeSha256FromBuffer(Buffer.from(leftContent)).slice(0, 12)
+    ),
+    true
+  );
+});
+
+test('creates compare job and restores full pair result after authenticated compare', async () => {
+  const owner = await register(uniqueUsername('job-owner'));
+  const stranger = await register(uniqueUsername('job-stranger'));
+  const leftContent = 'one\ntwo\n';
+  const rightContent = 'one\nthree\n';
+  const formData = new FormData();
+
+  formData.append('fileType', 'text');
+  formData.append('leftFile', new Blob([leftContent], { type: 'text/plain' }), 'job-left.txt');
+  formData.append('rightFile', new Blob([rightContent], { type: 'text/plain' }), 'job-right.txt');
+
+  const compareResponse = await fetch(`${baseUrl}/api/diff/compare`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${owner.token}`
+    },
+    body: formData
+  });
+  const compareJson = await compareResponse.json();
+  const jobId = compareJson.jobId;
+  const listResponse = await request('GET', '/api/jobs', { token: owner.token });
+  const listedJob = listResponse.json.data.find((job) => job.id === jobId);
+  const getResponse = await request('GET', `/api/jobs/${jobId}`, { token: owner.token });
+  const getAsStranger = await request('GET', `/api/jobs/${jobId}`, { token: stranger.token });
+  const deleteResponse = await request('DELETE', `/api/jobs/${jobId}`, { token: owner.token });
+  const deletedGetResponse = await request('GET', `/api/jobs/${jobId}`, { token: owner.token });
+
+  assert.equal(compareResponse.status, 200);
+  assert.equal(compareJson.success, true);
+  assert.equal(typeof jobId, 'string');
+  assert.equal(listResponse.status, 200);
+  assert.equal(Boolean(listedJob), true);
+  assert.equal(listedJob.inputMode, 'pair');
+  assert.equal(listedJob.resultCount, compareJson.summary.total);
+  assert.equal(getResponse.status, 200);
+  assert.equal(getResponse.json.data.compareResult.jobId, jobId);
+  assert.equal(getResponse.json.data.compareResult.summary.modified, 1);
+  assert.equal(getResponse.json.data.files.map((file) => file.role).join(','), 'left,right');
+  assert.equal('storagePath' in getResponse.json.data, false);
+  assert.equal(getAsStranger.status, 404);
+  assert.equal(deleteResponse.status, 200);
+  assert.equal(deletedGetResponse.status, 404);
 });

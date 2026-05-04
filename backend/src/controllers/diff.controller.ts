@@ -2,10 +2,20 @@ import fs from 'node:fs/promises';
 
 import type { NextFunction, Request, Response } from 'express';
 
+import {
+  attachJobFile,
+  createCompareJob,
+  saveCompareResult
+} from '../services/compareJob.service.js';
 import { detectFileType, normalizeRequestedFileType } from '../services/fileType.service.js';
 import { buildFilterInfo, normalizeFilterOptions } from '../services/filter.service.js';
 import { compareCsvText } from '../services/csvDiff.service.js';
 import { compareExcelBuffers } from '../services/excelDiff.service.js';
+import {
+  computeSha256FromFile,
+  createUploadedFileRecord,
+  type UploadedFileRecord
+} from '../services/fileRecord.service.js';
 import { compareJsonText } from '../services/jsonDiff.service.js';
 import {
   buildAdvancedRulesInfo,
@@ -126,6 +136,169 @@ function getVersionFiles(req: Request) {
   return (Array.isArray(req.files) ? req.files : []) as Express.Multer.File[];
 }
 
+async function recordUploadedFileMetadata({
+  fileType,
+  files,
+  sourceType,
+  userId
+}: {
+  fileType: SupportedFileType;
+  files: Array<Express.Multer.File | undefined>;
+  sourceType: string;
+  userId: number | undefined;
+}): Promise<Array<UploadedFileRecord | null>> {
+  if (!userId) {
+    return files.map(() => null);
+  }
+
+  return Promise.all(
+    files.map(async (file) => {
+      if (!file) {
+        return null;
+      }
+
+      try {
+        const sha256 = await computeSha256FromFile(file.path);
+
+        return createUploadedFileRecord(userId, {
+          originalName: file.originalname,
+          storedName: file.filename,
+          fileType,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          sha256,
+          storagePath: file.path,
+          sourceType
+        });
+      } catch (error) {
+        console.warn('文件元数据记录失败', error);
+        return null;
+      }
+    })
+  );
+}
+
+function getDisplayName(file: Express.Multer.File | undefined, fallback: string) {
+  return file?.originalname ?? fallback;
+}
+
+function buildPairJobTitle(fileType: SupportedFileType, leftName: string, rightName: string) {
+  return `${fileType.toUpperCase()} 对比：${leftName} -> ${rightName}`;
+}
+
+async function persistPairCompareJob({
+  durationMs,
+  fileType,
+  leftDisplayName,
+  leftFile,
+  response,
+  rightDisplayName,
+  rightFile,
+  userId
+}: {
+  durationMs: number;
+  fileType: SupportedFileType;
+  leftDisplayName: string;
+  leftFile: Express.Multer.File | undefined;
+  response: CompareResponse;
+  rightDisplayName: string;
+  rightFile: Express.Multer.File | undefined;
+  userId: number | undefined;
+}) {
+  if (!userId) {
+    return;
+  }
+
+  try {
+    const fileRecords = await recordUploadedFileMetadata({
+      fileType,
+      files: [leftFile, rightFile],
+      sourceType: 'compare-upload',
+      userId
+    });
+    const job = createCompareJob(userId, {
+      title: buildPairJobTitle(fileType, leftDisplayName, rightDisplayName),
+      fileType,
+      inputMode: 'pair',
+      status: 'completed',
+      algorithm: response.performance.algorithm,
+      durationMs,
+      resultCount: response.summary.total,
+      resultTruncated: response.performance.resultTruncated
+    });
+
+    attachJobFile(job.id, {
+      fileId: fileRecords[0]?.id ?? null,
+      role: 'left',
+      versionIndex: null,
+      displayName: leftDisplayName
+    });
+    attachJobFile(job.id, {
+      fileId: fileRecords[1]?.id ?? null,
+      role: 'right',
+      versionIndex: null,
+      displayName: rightDisplayName
+    });
+
+    response.jobId = String(job.id);
+    saveCompareResult(job.id, response);
+  } catch (error) {
+    console.warn('对比任务保存失败', error);
+  }
+}
+
+async function persistVersionCompareJob({
+  durationMs,
+  fileType,
+  files,
+  response,
+  userId
+}: {
+  durationMs: number;
+  fileType: SupportedFileType;
+  files: Express.Multer.File[];
+  response: VersionChainResponse;
+  userId: number | undefined;
+}) {
+  if (!userId) {
+    return;
+  }
+
+  try {
+    const fileRecords = await recordUploadedFileMetadata({
+      fileType,
+      files,
+      sourceType: 'version-compare-upload',
+      userId
+    });
+    const resultTruncated = response.intervals.some((interval) => interval.performance.resultTruncated);
+    const job = createCompareJob(userId, {
+      title: `${fileType.toUpperCase()} 多版本对比：${files.length} 个版本`,
+      fileType,
+      inputMode: 'versions',
+      status: 'completed',
+      algorithm: 'version-chain',
+      durationMs,
+      resultCount: response.trend.totalDifferences,
+      resultTruncated
+    });
+
+    files.forEach((file, index) => {
+      attachJobFile(job.id, {
+        fileId: fileRecords[index]?.id ?? null,
+        role: 'version',
+        versionIndex: index,
+        displayName: file.originalname
+      });
+    });
+
+    response.jobId = String(job.id);
+    saveCompareResult(job.id, response);
+  } catch (error) {
+    console.warn('多版本对比任务保存失败', error);
+  }
+}
+
 function createEmptyResponse(
   fileType: SupportedFileType,
   filters: AppliedFilterInfo,
@@ -152,6 +325,7 @@ function createEmptyResponse(
 }
 
 export async function compareDiff(req: Request, res: Response<CompareResponse>, next: NextFunction) {
+  const startedAt = Date.now();
   let resolvedFileType: SupportedFileType = 'text';
 
   try {
@@ -236,7 +410,7 @@ export async function compareDiff(req: Request, res: Response<CompareResponse>, 
     const normalization =
       'normalization' in diffResult ? diffResult.normalization : buildNormalizationInfo(normalizationOptions);
 
-    res.json({
+    const response: CompareResponse = {
       success: true,
       fileType,
       summary: diffResult.summary,
@@ -261,7 +435,20 @@ export async function compareDiff(req: Request, res: Response<CompareResponse>, 
         rightSize: rightInput.size,
         requestedFileType
       }
+    };
+
+    await persistPairCompareJob({
+      durationMs: Date.now() - startedAt,
+      fileType,
+      leftDisplayName: getDisplayName(leftFile, '左侧文本输入'),
+      leftFile,
+      response,
+      rightDisplayName: getDisplayName(rightFile, '右侧文本输入'),
+      rightFile,
+      userId: req.user?.id
     });
+
+    res.json(response);
   } catch (error) {
     if (error instanceof SyntaxError) {
       const filters = buildFilterInfo(normalizeFilterOptions(req.body));
@@ -294,6 +481,7 @@ export async function compareVersionDiff(
   res: Response<VersionChainResponse>,
   next: NextFunction
 ) {
+  const startedAt = Date.now();
   let resolvedFileType: SupportedFileType = 'text';
 
   try {
@@ -361,14 +549,24 @@ export async function compareVersionDiff(
       versions
     });
 
-    res.json({
+    const responseBody: VersionChainResponse = {
       ...response,
       received: {
         ...response.received,
         fileNames: files.map((file) => file.originalname),
         requestedFileType
       }
+    };
+
+    await persistVersionCompareJob({
+      durationMs: Date.now() - startedAt,
+      fileType,
+      files,
+      response: responseBody,
+      userId: req.user?.id
     });
+
+    res.json(responseBody);
   } catch (error) {
     const filters = buildFilterInfo(normalizeFilterOptions(req.body));
 

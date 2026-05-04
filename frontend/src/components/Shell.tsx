@@ -6,7 +6,9 @@ import { useAuth } from '../contexts/AuthContext';
 const navItems = [
   { to: '/', label: '工作台', description: '状态与入口' },
   { to: '/compare', label: '数据对比', description: '文本 / JSON / 表格' },
-  { to: '/history', label: '历史记录', description: '回看与恢复' }
+  { to: '/jobs', label: '任务中心', description: '结果与详情' },
+  { to: '/history', label: '历史记录', description: '回看与恢复' },
+  { to: '/files', label: '文件记录', description: '元数据管理' }
 ];
 
 export function Shell({ children }: PropsWithChildren) {

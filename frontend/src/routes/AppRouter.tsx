@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 
+import { CompareJobsPage } from '../pages/CompareJobsPage';
 import { ComparePage } from '../pages/ComparePage';
+import { FileRecordsPage } from '../pages/FileRecordsPage';
 import { HistoryPage } from '../pages/HistoryPage';
 import { HomePage } from '../pages/HomePage';
 import { LoginPage } from '../pages/LoginPage';
@@ -32,6 +34,22 @@ export function AppRouter() {
         element={
           <ProtectedRoute>
             <HistoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/files"
+        element={
+          <ProtectedRoute>
+            <FileRecordsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs"
+        element={
+          <ProtectedRoute>
+            <CompareJobsPage />
           </ProtectedRoute>
         }
       />

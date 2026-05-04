@@ -464,6 +464,9 @@ textarea:focus-visible {
 .multi-version-panel,
 .version-timeline-panel,
 .version-interval-heading,
+.file-record-panel,
+.job-detail-panel,
+.job-item,
 .history-item {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -1262,6 +1265,8 @@ textarea {
 
 .export-actions button,
 .history-actions button,
+.file-record-row button,
+.job-actions button,
 .diff-jump-actions button,
 .tree-actions button,
 .tree-toggle {
@@ -1274,6 +1279,8 @@ textarea {
 
 .export-actions button,
 .history-actions button,
+.file-record-row button,
+.job-actions button,
 .diff-jump-actions button,
 .tree-actions button {
   padding: 8px 11px;
@@ -1281,6 +1288,8 @@ textarea {
 
 .export-actions button:hover:not(:disabled),
 .history-actions button:hover:not(:disabled),
+.file-record-row button:hover:not(:disabled),
+.job-actions button:hover:not(:disabled),
 .diff-jump-actions button:hover:not(:disabled),
 .tree-actions button:hover:not(:disabled),
 .tree-toggle:hover:not(:disabled) {
@@ -1371,6 +1380,187 @@ textarea {
 .history-stats .modified {
   background: var(--color-modified-bg);
   color: var(--color-modified);
+}
+
+.file-record-panel {
+  overflow: hidden;
+}
+
+.file-record-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.5fr)
+    minmax(88px, 0.7fr)
+    minmax(86px, 0.7fr)
+    minmax(112px, 0.8fr)
+    minmax(106px, 0.8fr)
+    minmax(158px, 1fr)
+    minmax(74px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 13px 16px;
+}
+
+.file-record-header {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.file-record-row {
+  border-bottom: 1px solid #e8eef4;
+}
+
+.file-record-row:last-child {
+  border-bottom: 0;
+}
+
+.file-record-row strong,
+.file-record-row span,
+.file-record-row time,
+.file-record-row code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-record-row strong {
+  color: var(--color-heading);
+}
+
+.file-record-row span,
+.file-record-row time {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.file-record-row code {
+  color: #26394b;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.job-center-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  align-items: start;
+}
+
+.job-list {
+  display: grid;
+  gap: 12px;
+}
+
+.job-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+}
+
+.job-main {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.job-main strong {
+  overflow: hidden;
+  color: var(--color-heading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-main span,
+.job-main small {
+  color: var(--color-muted);
+}
+
+.job-metrics,
+.job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.job-metrics span {
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 6px 9px;
+}
+
+.job-metrics .ok {
+  background: var(--color-added-bg);
+  color: var(--color-added);
+}
+
+.job-metrics .warning {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.job-detail-panel {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.job-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.job-detail-grid span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.job-detail-grid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-heading);
+}
+
+.job-file-list {
+  display: grid;
+  gap: 8px;
+}
+
+.job-file-list span {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  color: #26394b;
+  font-size: 13px;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+}
+
+.job-detail-empty {
+  display: grid;
+  gap: 8px;
+}
+
+.job-detail-empty strong {
+  color: var(--color-heading);
+}
+
+.job-detail-empty span {
+  color: var(--color-muted);
+  line-height: 1.6;
 }
 
 .summary-panel {
@@ -2340,6 +2530,54 @@ textarea {
 
   .history-item {
     grid-template-columns: 1fr;
+  }
+
+  .job-center-layout,
+  .job-item {
+    grid-template-columns: 1fr;
+  }
+
+  .job-detail-panel {
+    position: static;
+  }
+
+  .job-actions,
+  .job-metrics {
+    justify-content: flex-start;
+  }
+
+  .file-record-header {
+    display: none;
+  }
+
+  .file-record-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .file-record-row {
+    gap: 8px;
+    align-items: start;
+    padding: 16px;
+  }
+
+  .file-record-row strong,
+  .file-record-row span,
+  .file-record-row time,
+  .file-record-row code {
+    display: grid;
+    gap: 3px;
+    white-space: normal;
+  }
+
+  .file-record-row strong::before,
+  .file-record-row span::before,
+  .file-record-row time::before,
+  .file-record-row code::before {
+    content: attr(data-label);
+    color: var(--color-muted);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 800;
   }
 
   .json-tree-header {

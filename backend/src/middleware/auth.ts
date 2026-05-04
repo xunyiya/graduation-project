@@ -19,6 +19,35 @@ function readBearerToken(req: Request) {
   return header.slice('Bearer '.length).trim();
 }
 
+function readUserFromRequest(req: Request) {
+  const token = readBearerToken(req);
+
+  if (!token) {
+    return null;
+  }
+
+  const payload = verifyAuthToken(token);
+  const userId = payload ? Number.parseInt(payload.sub, 10) : Number.NaN;
+
+  if (!payload || !Number.isFinite(userId)) {
+    return null;
+  }
+
+  const user = findUserById(userId);
+
+  return user ? toPublicUser(user) : null;
+}
+
+export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const user = readUserFromRequest(req);
+
+  if (user) {
+    req.user = user;
+  }
+
+  next();
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = readBearerToken(req);
 
@@ -30,10 +59,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  const payload = verifyAuthToken(token);
-  const userId = payload ? Number.parseInt(payload.sub, 10) : Number.NaN;
+  const user = readUserFromRequest(req);
 
-  if (!payload || !Number.isFinite(userId)) {
+  if (!user) {
     res.status(401).json({
       success: false,
       message: '登录状态无效或已过期，请重新登录。'
@@ -41,16 +69,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  const user = findUserById(userId);
-
-  if (!user) {
-    res.status(401).json({
-      success: false,
-      message: '登录用户不存在，请重新登录。'
-    });
-    return;
-  }
-
-  req.user = toPublicUser(user);
+  req.user = user;
   next();
 }

@@ -56,6 +56,8 @@ const defaultPerformance = {
 
 interface CompareLocationState {
   compareResult?: CompareResponse;
+  versionResult?: VersionChainResponse;
+  restoreSource?: 'history' | 'job';
 }
 
 function isTextLine(item: DiffResultItem): item is DiffLineItem {
@@ -164,6 +166,18 @@ export function ComparePage() {
   );
 
   useEffect(() => {
+    if (locationState?.versionResult) {
+      const firstInterval = locationState.versionResult.intervals[0] ?? null;
+
+      setVersionResponse(locationState.versionResult);
+      setResponse(null);
+      setActiveDiffId(null);
+      setActiveVersionIntervalId(firstInterval?.id ?? null);
+      setActiveVersionDiffId(getFirstDiffId(firstInterval));
+      setNotice('已从对比任务中心恢复多版本结果。');
+      return;
+    }
+
     if (!locationState?.compareResult) {
       return;
     }
@@ -174,8 +188,12 @@ export function ComparePage() {
     setActiveDiffId(entries[0]?.diffId ?? null);
     setActiveVersionIntervalId(null);
     setActiveVersionDiffId(null);
-    setNotice('已从历史记录恢复对比结果。');
-  }, [locationState?.compareResult]);
+    setNotice(
+      locationState.restoreSource === 'job'
+        ? '已从对比任务中心恢复结果。'
+        : '已从历史记录恢复对比结果。'
+    );
+  }, [locationState?.compareResult, locationState?.restoreSource, locationState?.versionResult]);
 
   function handleFilterChange(key: DiffFilterKey, enabled: boolean) {
     setFilterOptions((currentOptions) => ({
@@ -203,7 +221,11 @@ export function ComparePage() {
       setActiveDiffId(entries[0]?.diffId ?? null);
       try {
         await addHistoryRecord(result);
-        setNotice('对比完成，已保存到当前账号的历史记录。');
+        setNotice(
+          result.jobId
+            ? `对比完成，已保存到历史记录和任务中心（任务 #${result.jobId}）。`
+            : '对比完成，已保存到当前账号的历史记录。'
+        );
       } catch (historyError) {
         setNotice(
           `对比完成，但后端历史记录保存失败，已临时保存到本地：${

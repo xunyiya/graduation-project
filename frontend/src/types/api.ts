@@ -243,6 +243,7 @@ export type DiffResultItem = DiffLineItem | JsonDiffNode | TableDiffItem;
 
 export interface CompareResponse {
   success: boolean;
+  jobId?: string;
   fileType: FileType;
   summary: DiffSummary;
   result: DiffResultItem[];
@@ -290,6 +291,7 @@ export interface VersionTrendSummary {
 
 export interface VersionChainResponse {
   success: boolean;
+  jobId?: string;
   fileType: FileType;
   versions: VersionInfo[];
   intervals: VersionIntervalCompare[];
@@ -324,4 +326,41 @@ export interface HistoryRecord {
   summary: DiffSummary;
   filters: AppliedFilterInfo;
   compareResult: CompareResponse;
+}
+
+export interface UploadedFileRecord {
+  id: string;
+  fileName: string;
+  fileType: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  sha256Prefix: string | null;
+  sourceType: string;
+  createdAt: string;
+}
+
+export interface CompareJobFileRecord {
+  id: string;
+  fileId: string | null;
+  role: string;
+  versionIndex: number | null;
+  displayName: string;
+  createdAt: string;
+}
+
+export interface CompareJobRecord {
+  id: string;
+  title: string;
+  fileType: FileType;
+  inputMode: 'pair' | 'versions';
+  status: string;
+  algorithm: string | null;
+  durationMs: number;
+  resultCount: number;
+  resultTruncated: boolean;
+  createdAt: string;
+  updatedAt: string;
+  files?: CompareJobFileRecord[];
+  compareResult?: CompareResponse;
+  versionResult?: VersionChainResponse;
 }
